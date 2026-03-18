@@ -23,7 +23,51 @@ def single_attn(
     K = x @ W_k
     V = x @ W_v
 
-    S = (Q @ K.T) / np.sqrt(d)
+    # normally would get causal masked
+    S = (Q @ K.T) / np.sqrt(d) 
+
+    A = S.softmax(-1)
+
+    return A @ V
+
+def batch_single_attn(
+    x: Float[Tensor, "b seq_len emb_dim"],
+    W_q: Float[Tensor, "emb_dim d"],
+    W_k: Float[Tensor, "emb_dim d"],
+    W_v: Float[Tensor, "emb_dim d_v"],
+) -> Float[Tensor, "b seq_len d_v"]:
+
+    d = W_q.shape[-1]
+
+    Q = x @ W_q
+    K = x @ W_k
+    V = x @ W_v
+
+    # normally would get causal masked
+    S = (Q @ K.mT) / np.sqrt(d) 
+
+    A = S.softmax(-1)
+
+    return A @ V
+
+def batch_mha(
+    x: Float[Tensor, "b seq_len emb_dim"],
+    W_q: Float[Tensor, "h emb_dim d"],
+    W_k: Float[Tensor, "h emb_dim d"],
+    W_v: Float[Tensor, "h emb_dim d_v"],
+) -> Float[Tensor, "b seq_len d"]:
+
+    # TODO 
+
+    d = W_q.shape[-1]
+
+    Q = x @ W_q
+    K = x @ W_k
+    V = x @ W_v
+
+    # normally would get causal masked
+    S = (Q @ K.mT) / np.sqrt(d) 
+
     A = S.softmax(-1)
 
     return A @ V
@@ -37,6 +81,11 @@ def main():
 
     y = single_attn(x, w_q, w_k, w_v)
     print(y.shape)
+
+    x_bat = torch.zeros(4,2,5)
+    y_bat = batch_single_attn(x_bat,w_q,w_k,w_v)
+
+    print(y_bat.shape)
 
     print("Hello from jax!")
 
