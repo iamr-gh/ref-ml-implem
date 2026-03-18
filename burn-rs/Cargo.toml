@@ -1,0 +1,7 @@
+[package]
+name = "burn-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+burn = { version = "~0.20", features = ["std", "tui", "train", "vision", "wgpu", "fusion"], default-features = false }
