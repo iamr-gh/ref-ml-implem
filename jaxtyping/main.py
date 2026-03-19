@@ -1,7 +1,7 @@
 from jaxtyping import Float
 import numpy as np
+import torch
 from torch import Tensor
-from torch import torch
 
 # let's look at implementing an attention mechanism
 
@@ -24,11 +24,12 @@ def single_attn(
     V = x @ W_v
 
     # normally would get causal masked
-    S = (Q @ K.T) / np.sqrt(d) 
+    S = (Q @ K.T) / np.sqrt(d)
 
     A = S.softmax(-1)
 
     return A @ V
+
 
 def batch_single_attn(
     x: Float[Tensor, "b seq_len emb_dim"],
@@ -44,33 +45,37 @@ def batch_single_attn(
     V = x @ W_v
 
     # normally would get causal masked
-    S = (Q @ K.mT) / np.sqrt(d) 
+    S = (Q @ K.mT) / np.sqrt(d)
 
     A = S.softmax(-1)
 
     return A @ V
+
 
 def batch_mha(
     x: Float[Tensor, "b seq_len emb_dim"],
     W_q: Float[Tensor, "h emb_dim d"],
     W_k: Float[Tensor, "h emb_dim d"],
     W_v: Float[Tensor, "h emb_dim d_v"],
-) -> Float[Tensor, "b seq_len d"]:
-
-    # TODO 
-
+) -> Float[Tensor, "b seq_len h_d_v"]:
     d = W_q.shape[-1]
 
-    Q = x @ W_q
-    K = x @ W_k
-    V = x @ W_v
+    x_heads = x.unsqueeze(1)
 
-    # normally would get causal masked
-    S = (Q @ K.mT) / np.sqrt(d) 
+    Q = x_heads @ W_q.unsqueeze(0)  # [b, h, seq_len, d]
+    K = x_heads @ W_k.unsqueeze(0)  # [b, h, seq_len, d]
+    V = x_heads @ W_v.unsqueeze(0)  # [b, h, seq_len, d_v]
 
+    S = (Q @ K.mT) / np.sqrt(d)  # [b, h, seq_len, seq_len]
     A = S.softmax(-1)
 
-    return A @ V
+    out = A @ V  # [b, h, seq_len, d_v]
+
+    b, h, seq_len, d_v = out.shape
+    out = out.transpose(1, 2)  # [b, seq_len, h, d_v]
+    out = out.reshape(b, seq_len, h * d_v)
+
+    return out
 
 
 def main():
@@ -82,10 +87,17 @@ def main():
     y = single_attn(x, w_q, w_k, w_v)
     print(y.shape)
 
-    x_bat = torch.zeros(4,2,5)
-    y_bat = batch_single_attn(x_bat,w_q,w_k,w_v)
+    x_bat = torch.zeros(4, 2, 5)
+    y_bat = batch_single_attn(x_bat, w_q, w_k, w_v)
 
     print(y_bat.shape)
+
+    w_q_h = torch.zeros(3, 5, 4)
+    w_k_h = torch.zeros(3, 5, 4)
+    w_v_h = torch.zeros(3, 5, 4)
+
+    y_mha = batch_mha(x_bat, w_q_h, w_k_h, w_v_h)
+    print(y_mha.shape)
 
     print("Hello from jax!")
 

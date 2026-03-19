@@ -6,6 +6,7 @@ This rust framework claims to be a novel new deep learning framework that doesn'
 
 And fom there yeah it's easy to create a template and move around backends, but the amount of repeat work in definition is still quite painful.
 The actual swapping of backends and batching data utilities seem useful, akin to torch but with some more map and filter pieces.
+I can see how/why this was created, but as a frontend I think it's still quite nasty.
 
 Their suggested sample code to define the network can be found in the src folder here.
 
