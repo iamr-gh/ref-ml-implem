@@ -65,6 +65,9 @@ single_attn :: proc(
 //     W_v: Float[Tensor, "h emb_dim d_v"],
 // ) -> Float[Tensor, "b seq_len h_d_v"]:
 
+batch_mha :: proc(x: Tensor4(1, $B, $L, $E)) {
+}
+
 
 // I should do the full classic mnist training
 
@@ -78,4 +81,8 @@ main :: proc() {
 	y := single_attn(x, w_q, w_k, w_v)
 
 	fmt.printf("{}", y)
+
+	assert(prod([4]int{1, 2, 3, 4}) == 24)
+
+
 }
