@@ -65,24 +65,29 @@ single_attn :: proc(
 //     W_v: Float[Tensor, "h emb_dim d_v"],
 // ) -> Float[Tensor, "b seq_len h_d_v"]:
 
-batch_mha :: proc(x: Tensor4(1, $B, $L, $E)) {
+batch_mha :: proc(
+	$B, $L, $E, $H, $D, $DV: int,
+	// Declare values explicitly first, appeases solver
+	x: Tensor4(1, B, L, E),
+	w_q: Tensor4(1, H, E, D),
+	w_k: Tensor4(1, H, E, D),
+	w_v: Tensor4(1, H, E, DV),
+) -> Tensor4(1, B, L, H * DV) {
+
+
 }
-
-
-// I should do the full classic mnist training
-
 
 main :: proc() {
-	x := matrix[2, 3]f32{}
-	w_q := matrix[3, 4]f32{}
-	w_k := matrix[3, 4]f32{}
-	w_v := matrix[3, 4]f32{}
-
-	y := single_attn(x, w_q, w_k, w_v)
-
-	fmt.printf("{}", y)
-
-	assert(prod([4]int{1, 2, 3, 4}) == 24)
-
-
+	// x := matrix[2, 3]f32{}
+	// w_q := matrix[3, 4]f32{}
+	// w_k := matrix[3, 4]f32{}
+	// w_v := matrix[3, 4]f32{}
+	//
+	// y := single_attn(x, w_q, w_k, w_v)
+	//
+	// fmt.printf("{}", y)
+	//
+	// assert(prod([4]int{1, 2, 3, 4}) == 24)
+	//
 }
+// I should do the full classic mnist training
