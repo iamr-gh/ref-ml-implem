@@ -73,21 +73,78 @@ batch_mha :: proc(
 	w_k: Tensor4(1, H, E, D),
 	w_v: Tensor4(1, H, E, DV),
 ) -> Tensor4(1, B, L, H * DV) {
+	d := f32(D)
 
+	x_heads := unsqueeze(x, AXIS_1)
+	q := matmul(x_heads, unsqueeze(w_q, AXIS_0))
+	k := matmul(x_heads, unsqueeze(w_k, AXIS_0))
+	v := matmul(x_heads, unsqueeze(w_v, AXIS_0))
 
+	out_heads := Tensor4(B, H, L, DV){}
+	inv_scale := 1 / math.sqrt(d)
+
+	for b in 0 ..< B {
+		for h in 0 ..< H {
+			s := matrix[L, L]f32{}
+
+			for q_idx in 0 ..< L {
+				for k_idx in 0 ..< L {
+					dot: f32 = 0
+					for d_idx in 0 ..< D {
+						dot += i(q, b, h, q_idx, d_idx) * i(k, b, h, k_idx, d_idx)
+					}
+					s[q_idx, k_idx] = dot * inv_scale
+				}
+			}
+
+			softmax_last_dim(&s)
+
+			for q_idx in 0 ..< L {
+				for dv_idx in 0 ..< DV {
+					sum: f32 = 0
+					for k_idx in 0 ..< L {
+						sum += s[q_idx, k_idx] * i(v, b, h, k_idx, dv_idx)
+					}
+					set4(&out_heads, b, h, q_idx, dv_idx, sum)
+				}
+			}
+		}
+	}
+
+	out := Tensor4(1, B, L, H * DV){}
+	for b in 0 ..< B {
+		for l in 0 ..< L {
+			for h in 0 ..< H {
+				for dv_idx in 0 ..< DV {
+					set4(&out, 0, b, l, (h * DV) + dv_idx, i(out_heads, b, h, l, dv_idx))
+				}
+			}
+		}
+	}
+
+	return out
 }
 
 main :: proc() {
-	// x := matrix[2, 3]f32{}
-	// w_q := matrix[3, 4]f32{}
-	// w_k := matrix[3, 4]f32{}
-	// w_v := matrix[3, 4]f32{}
-	//
-	// y := single_attn(x, w_q, w_k, w_v)
-	//
-	// fmt.printf("{}", y)
-	//
-	// assert(prod([4]int{1, 2, 3, 4}) == 24)
-	//
+	x := matrix[2, 3]f32{}
+	w_q := matrix[3, 4]f32{}
+	w_k := matrix[3, 4]f32{}
+	w_v := matrix[3, 4]f32{}
+
+	y := single_attn(x, w_q, w_k, w_v)
+
+	fmt.printf("{}\n", y)
+
+	x_bat := tensor(4, 2, 5)
+
+	w_q_h := tensor(3, 5, 4)
+	w_k_h := tensor(3, 5, 4)
+	w_v_h := tensor(3, 5, 4)
+
+	// I would like to not need to specify all these dims
+	y_mha := batch_mha(4, 2, 5, 3, 4, 4, x_bat, w_q_h, w_k_h, w_v_h)
+
+	fmt.printf("%#v\n", y_mha)
+
 }
 // I should do the full classic mnist training
