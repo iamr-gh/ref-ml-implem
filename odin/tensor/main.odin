@@ -1,4 +1,4 @@
-package main
+package tensor
 
 import "core:fmt"
 import "core:math"
@@ -48,22 +48,6 @@ single_attn :: proc(
 
 	return s * v
 }
-
-
-// def batch_single_attn(
-//     x: Float[Tensor, "b seq_len emb_dim"],
-//     W_q: Float[Tensor, "emb_dim d"],
-//     W_k: Float[Tensor, "emb_dim d"],
-//     W_v: Float[Tensor, "emb_dim d_v"],
-// ) -> Float[Tensor, "b seq_len d_v"]:
-
-
-// def batch_mha(
-//     x: Float[Tensor, "b seq_len emb_dim"],
-//     W_q: Float[Tensor, "h emb_dim d"],
-//     W_k: Float[Tensor, "h emb_dim d"],
-//     W_v: Float[Tensor, "h emb_dim d_v"],
-// ) -> Float[Tensor, "b seq_len h_d_v"]:
 
 batch_mha :: proc(
 	$B, $L, $E, $H, $D, $DV: int,
@@ -145,6 +129,6 @@ main :: proc() {
 	y_mha := batch_mha(4, 2, 5, 3, 4, 4, x_bat, w_q_h, w_k_h, w_v_h)
 
 	fmt.printf("%#v\n", y_mha)
-
 }
+
 // I should do the full classic mnist training

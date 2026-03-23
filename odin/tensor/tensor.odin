@@ -1,4 +1,4 @@
-package main
+package tensor
 
 // we can have runtime managed shape easily
 // compile time shape is nicer?
@@ -137,49 +137,73 @@ matmul_same :: proc(t1: Tensor4($A, $B, $C, $D), t2: Tensor4(A, B, D, $E)) -> Te
 	return out
 }
 
-matmul_a_left :: proc(t1: Tensor4(1, $B, $C, $D), t2: Tensor4($A, B, D, $E)) -> Tensor4(A, B, C, E) {
+matmul_a_left :: proc(
+	t1: Tensor4(1, $B, $C, $D),
+	t2: Tensor4($A, B, D, $E),
+) -> Tensor4(A, B, C, E) {
 	out := Tensor4(A, B, C, E){}
 	matmul_impl(&out, t1, t2)
 	return out
 }
 
-matmul_a_right :: proc(t1: Tensor4($A, $B, $C, $D), t2: Tensor4(1, B, D, $E)) -> Tensor4(A, B, C, E) {
+matmul_a_right :: proc(
+	t1: Tensor4($A, $B, $C, $D),
+	t2: Tensor4(1, B, D, $E),
+) -> Tensor4(A, B, C, E) {
 	out := Tensor4(A, B, C, E){}
 	matmul_impl(&out, t1, t2)
 	return out
 }
 
-matmul_b_left :: proc(t1: Tensor4($A, 1, $C, $D), t2: Tensor4(A, $B, D, $E)) -> Tensor4(A, B, C, E) {
+matmul_b_left :: proc(
+	t1: Tensor4($A, 1, $C, $D),
+	t2: Tensor4(A, $B, D, $E),
+) -> Tensor4(A, B, C, E) {
 	out := Tensor4(A, B, C, E){}
 	matmul_impl(&out, t1, t2)
 	return out
 }
 
-matmul_b_right :: proc(t1: Tensor4($A, $B, $C, $D), t2: Tensor4(A, 1, D, $E)) -> Tensor4(A, B, C, E) {
+matmul_b_right :: proc(
+	t1: Tensor4($A, $B, $C, $D),
+	t2: Tensor4(A, 1, D, $E),
+) -> Tensor4(A, B, C, E) {
 	out := Tensor4(A, B, C, E){}
 	matmul_impl(&out, t1, t2)
 	return out
 }
 
-matmul_ab_left :: proc(t1: Tensor4(1, 1, $C, $D), t2: Tensor4($A, $B, D, $E)) -> Tensor4(A, B, C, E) {
+matmul_ab_left :: proc(
+	t1: Tensor4(1, 1, $C, $D),
+	t2: Tensor4($A, $B, D, $E),
+) -> Tensor4(A, B, C, E) {
 	out := Tensor4(A, B, C, E){}
 	matmul_impl(&out, t1, t2)
 	return out
 }
 
-matmul_ab_right :: proc(t1: Tensor4($A, $B, $C, $D), t2: Tensor4(1, 1, D, $E)) -> Tensor4(A, B, C, E) {
+matmul_ab_right :: proc(
+	t1: Tensor4($A, $B, $C, $D),
+	t2: Tensor4(1, 1, D, $E),
+) -> Tensor4(A, B, C, E) {
 	out := Tensor4(A, B, C, E){}
 	matmul_impl(&out, t1, t2)
 	return out
 }
 
-matmul_a_right_b_left :: proc(t1: Tensor4($A, 1, $C, $D), t2: Tensor4(1, $B, D, $E)) -> Tensor4(A, B, C, E) {
+matmul_a_right_b_left :: proc(
+	t1: Tensor4($A, 1, $C, $D),
+	t2: Tensor4(1, $B, D, $E),
+) -> Tensor4(A, B, C, E) {
 	out := Tensor4(A, B, C, E){}
 	matmul_impl(&out, t1, t2)
 	return out
 }
 
-matmul_a_left_b_right :: proc(t1: Tensor4(1, $B, $C, $D), t2: Tensor4($A, 1, D, $E)) -> Tensor4(A, B, C, E) {
+matmul_a_left_b_right :: proc(
+	t1: Tensor4(1, $B, $C, $D),
+	t2: Tensor4($A, 1, D, $E),
+) -> Tensor4(A, B, C, E) {
 	out := Tensor4(A, B, C, E){}
 	matmul_impl(&out, t1, t2)
 	return out
