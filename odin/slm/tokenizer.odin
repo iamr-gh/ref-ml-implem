@@ -8,7 +8,8 @@ import "core:strings"
 // https://github.com/huggingface/tokenizers
 
 tokenize :: proc(str: string) -> [dynamic]u64 {
-	out := [dynamic]u64{} // note, allocation
+	context.allocator = context.temp_allocator
+	out := [dynamic]u64{}
 
 	// this looks pretty complicated to do properly, need to figure out the exact minimum I need
 
@@ -34,18 +35,16 @@ tokenize :: proc(str: string) -> [dynamic]u64 {
 }
 
 detokenize :: proc(lst: [dynamic]u64) -> string {
+	context.allocator = context.temp_allocator
 	// decoder is byte level
 
-	// placeholder string builder
 	sb := strings.builder_make()
-	// defer strings.builder_destroy(&sb) -- this kills the original
 
 	for b in lst {
 		strings.write_rune(&sb, rune(b))
 	}
 
-	s := strings.to_string(sb)
-	return s
+	return strings.to_string(sb)
 }
 
 verifyTokenizer :: proc(str: string) {
@@ -60,6 +59,10 @@ verifyTokenizer :: proc(str: string) {
 }
 
 testTokenizer :: proc() {
+	// basically not doing real mem management
+	// you can just make scopes by modifying context which is interesting
+	defer free_all(context.temp_allocator)
+
 	// todo: consider special tokens
 	testStrings := [?]string{"abc", "Hello, I am a man of the world", "I hope to be more someday"}
 
