@@ -8,12 +8,15 @@
 ##   [uint8[num_images] labels]
 
 import std/[math, strformat, streams, random]
+import plot
 
 const
   RawImgSize* = 28       # original MNIST image size
   ImgSize* = 30           # padded to 30x30 (1-pixel border of 1s for bias)
   InputDim* = ImgSize * ImgSize   # 900
   OutputDim* = 10                # digits 0-9
+  NumEpochs = 10
+  LearningRate = 0.01'f32
 
 type
   Image* = object
@@ -114,14 +117,13 @@ proc crossEntropyLoss*(yHat: Matrix[1, OutputDim]; y: int): float32 =
 
 # ── Training ────────────────────────────────────────────────────────────
 
-proc train*(
+proc trainEpoch*(
   xs: seq[Image];
   ys: seq[int];
   weights: var Matrix[InputDim, OutputDim];
-  lr: float32;
-  batch: int
+  lr: float32
 ): float32 =
-  ## SGD training loop (one sample at a time, batch param unused for now).
+  ## SGD training loop (one sample at a time).
   ## Returns average cross-entropy loss over the epoch.
   var
     grad: Matrix[InputDim, OutputDim]
@@ -157,17 +159,12 @@ proc train*(
       for j in 0 ..< OutputDim:
         weights[i][j] -= grad[i][j] * lr
 
-    if (idx + 1) mod 10000 == 0:
-      echo fmt"  trained {idx + 1}/{xs.len} samples"
-
   return totalLoss / float32(xs.len)
 
 # ── Data loading ────────────────────────────────────────────────────────
 
 proc loadDataset*(path: string): (seq[Image], seq[int]) =
   ## Load the binary dataset format produced by download_mnist.py.
-  ## Format: [uint32 num] [uint32 rows] [uint32 cols]
-  ##         [float32[num*rows*cols] pixels] [uint8[num] labels]
   var fs = newFileStream(path, fmRead)
   if fs == nil:
     echo fmt"ERROR: could not open {path}"
@@ -253,29 +250,50 @@ when isMainModule:
 
   var weights: Matrix[InputDim, OutputDim]
 
-  # Small Xavier-like init: uniform in [-1/sqrt(InputDim), 1/sqrt(InputDim)]
+  # Xavier-like init: uniform in [-1/sqrt(InputDim), 1/sqrt(InputDim)]
   let scale = 1.0'f32 / sqrt(float32(InputDim))
   for i in 0 ..< InputDim:
     for j in 0 ..< OutputDim:
       weights[i][j] = rand(2.0'f32 * scale) - scale
 
-  # Evaluate before training (random baseline)
-  echo "\nPre-training evaluation on test set..."
-  var (preCorrect, preLoss) = evaluate(testImages, testLabels, weights)
-  echo fmt"  accuracy: {preCorrect}/{testImages.len} ({100.0 * preCorrect.float / testImages.len.float:.2f}%)"
-  echo fmt"  avg loss: {preLoss:.4f}"
+  # Track metrics across epochs
+  var
+    epochNums: seq[int]
+    testAccs: seq[float]
+    testLosses: seq[float32]
+    trainLosses: seq[float32]
 
-  # Train 1 epoch
-  echo "\nTraining 1 epoch..."
+  # Evaluate before training (random baseline)
+  echo "\nEpoch 0 (before training)..."
+  let (preCorrect, preLoss) = evaluate(testImages, testLabels, weights)
+  let preAcc = preCorrect.float / testImages.len.float
+  echo fmt"  accuracy: {preCorrect}/{testImages.len} ({100.0 * preAcc:.2f}%)  loss: {preLoss:.4f}"
+
+  epochNums.add(0)
+  testAccs.add(preAcc)
+  testLosses.add(preLoss)
+  trainLosses.add(preLoss)  # no train loss yet, just use test loss as placeholder
+
   var trainXs = trainImages
   var trainYs = trainLabels
-  shuffleData(trainXs, trainYs)
 
-  let avgLoss = train(trainXs, trainYs, weights, lr = 0.01'f32, batch = 0)
-  echo fmt"  avg train loss: {avgLoss:.4f}"
+  for epoch in 1 .. NumEpochs:
+    echo fmt"\nEpoch {epoch}/{NumEpochs}..."
+    shuffleData(trainXs, trainYs)
 
-  # Evaluate on test set
-  echo "\nEvaluating on test set..."
-  let (correct, testLoss) = evaluate(testImages, testLabels, weights)
-  echo fmt"  accuracy: {correct}/{testImages.len} ({100.0 * correct.float / testImages.len.float:.2f}%)"
-  echo fmt"  avg test loss: {testLoss:.4f}"
+    let tLoss = trainEpoch(trainXs, trainYs, weights, LearningRate)
+    trainLosses.add(tLoss)
+
+    let (correct, tLoss2) = evaluate(testImages, testLabels, weights)
+    let acc = correct.float / testImages.len.float
+    echo fmt"  train loss: {tLoss:.4f}  test acc: {correct}/{testImages.len} ({100.0 * acc:.2f}%)  test loss: {tLoss2:.4f}"
+
+    epochNums.add(epoch)
+    testAccs.add(acc)
+    testLosses.add(tLoss2)
+
+  # Print results table
+  printTable(epochNums, testAccs, testLosses, trainLosses)
+
+  # Draw terminal plots
+  plotAccuracyLoss(epochNums, testAccs, testLosses)
