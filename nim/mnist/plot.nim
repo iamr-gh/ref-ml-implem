@@ -2,97 +2,77 @@
 ## No external dependencies - just ASCII/Unicode box drawing.
 
 import std/[strformat, sequtils]
+import model
 
 const
-  plotW* = 50   # plot area width in chars
-  plotH* = 12   # plot area height in lines
+  plotW* = 50
+  plotH* = 12
 
-proc plotLineChart*(
-  title: string;
-  epochs: seq[int];
-  values: seq[float];
-  unit: string
-) =
-  ## Draw a small ASCII line chart of values over epochs.
+type
+  History* = object
+    epochs*: seq[int]
+    trainLoss*: seq[float32]
+    test*: seq[Metrics]
+
+proc add*(h: var History; epoch: int; trainLoss: float32; test: Metrics) =
+  h.epochs.add(epoch)
+  h.trainLoss.add(trainLoss)
+  h.test.add(test)
+
+proc plotLineChart*(title: string; epochs: seq[int]; values: seq[float]) =
   let n = epochs.len
-  if n < 2:
-    return
+  if n < 2: return
 
-  # Find range
-  var
-    vMin = values[0]
-    vMax = values[0]
-  for i in 0 ..< n:
-    if values[i] < vMin: vMin = values[i]
-    if values[i] > vMax: vMax = values[i]
+  var vMin = values[0]
+  var vMax = values[0]
+  for v in values:
+    if v < vMin: vMin = v
+    if v > vMax: vMax = v
 
-  # Add 5% margin
-  let vRange = max(0.001, vMax - vMin)
-  vMin = max(0.0, vMin - vRange * 0.05)
-  vMax = vMax + vRange * 0.05
+  let margin = max(0.001, vMax - vMin) * 0.05
+  vMin = max(0.0, vMin - margin)
+  vMax += margin
 
-  # Build 2D grid
   var grid = newSeqWith(plotH, newString(plotW))
   for r in 0 ..< plotH:
     for c in 0 ..< plotW:
       grid[r][c] = ' '
 
   for i in 0 ..< n:
-    let xc = int(float(plotW - 1) * float(epochs[i] - epochs[0]) / float(max(1, epochs[n-1] - epochs[0])))
-    let yr = int(float(plotH - 1) * (1.0 - (values[i] - vMin) / (vMax - vMin)))
-    let x = xc.clamp(0, plotW - 1)
-    let y = yr.clamp(0, plotH - 1)
+    let x = int(float(plotW - 1) * float(epochs[i] - epochs[0]) / float(max(1, epochs[^1] - epochs[0]))).clamp(0, plotW - 1)
+    let y = int(float(plotH - 1) * (1.0 - (values[i] - vMin) / (vMax - vMin))).clamp(0, plotH - 1)
     grid[y][x] = '*'
 
-  # Draw chart
   var dashes = ""
-  for _ in 0 ..< 54 - title.len:
-    dashes.add("─")
+  for _ in 0 ..< max(0, 54 - title.len): dashes.add("─")
+
   echo ""
   echo fmt"┌─ {title} {dashes}┐"
   for r in 0 ..< plotH:
     let yVal = vMin + (vMax - vMin) * float(plotH - 1 - r) / float(plotH - 1)
     var line = fmt"│{yVal:6.2f} │"
-    for c in 0 ..< plotW:
-      line.add(grid[r][c])
+    for c in 0 ..< plotW: line.add(grid[r][c])
     line.add("│")
     echo line
 
-  # Bottom border
   var bottom = "│       └"
-  for c in 0 ..< plotW:
-    bottom.add("─")
+  for _ in 0 ..< plotW: bottom.add("─")
   bottom.add("│")
   echo bottom
 
-  # Epoch label
-  var label = fmt"│       epochs {epochs[0]}-{epochs[n-1]}"
-  while label.len < plotW + 10:
-    label.add(" ")
+  var label = fmt"│       epochs {epochs[0]}-{epochs[^1]}"
+  while label.len < plotW + 10: label.add(" ")
   label.add("│")
   echo label
   echo "└───────────────────────────────────────────────────────┘"
 
-
-proc plotAccuracyLoss*(
-  epochs: seq[int];
-  accs: seq[float];
-  losses: seq[float32]
-) =
-  ## Plot both test accuracy (as %) and average loss.
-  plotLineChart("Accuracy %", epochs, accs.mapIt(100.0 * it), "%")
-  plotLineChart("Avg Loss", epochs, losses.mapIt(float(it)), "")
-
-
-proc printTable*(
-  epochs: seq[int];
-  accs: seq[float];
-  losses: seq[float32];
-  trainLosses: seq[float32]
-) =
-  ## Print a compact results table.
+proc printTable*(h: History) =
   echo ""
   echo "Epoch │ Train Loss │ Test Loss │ Test Acc"
   echo "──────┼────────────┼───────────┼─────────"
-  for i in 0 ..< epochs.len:
-    echo fmt"  {epochs[i]:2d}  │  {trainLosses[i]:.4f}  │  {losses[i]:.4f}  │ {100.0 * accs[i]:5.2f}%"
+  for i in 0 ..< h.epochs.len:
+    echo fmt"  {h.epochs[i]:2d}  │  {h.trainLoss[i]:.4f}  │  {h.test[i].loss:.4f}  │ {100.0 * h.test[i].accuracy:5.2f}%"
+
+proc plotHistory*(h: History) =
+  plotLineChart("Accuracy %", h.epochs, h.test.mapIt(100.0 * float(it.accuracy)))
+  plotLineChart("Avg Loss", h.epochs, h.test.mapIt(float(it.loss)))
