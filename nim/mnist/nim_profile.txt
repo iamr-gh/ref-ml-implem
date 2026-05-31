@@ -1,0 +1,100 @@
+Model: input=784, hidden=@[128], output=10
+Loading data...
+TIMING load_train           1.066483s
+TIMING load_test            0.177820s
+  train: 60000 samples
+  test:  10000 samples
+TIMING init_model           0.000392s
+TIMING baseline_eval        1.500752s
+
+Epoch 0: test acc=12.98% loss=2.3134
+TIMING epoch_1_shuffle      0.030776s
+TIMING epoch_1_train        19.121951s
+TIMING epoch_1_eval         1.508032s
+Epoch  1: train loss=0.2281  test acc=96.10% loss=0.1254
+TIMING epoch_2_shuffle      0.033234s
+TIMING epoch_2_train        19.140508s
+TIMING epoch_2_eval         1.500868s
+Epoch  2: train loss=0.1038  test acc=96.56% loss=0.1100
+TIMING epoch_3_shuffle      0.032699s
+TIMING epoch_3_train        19.122712s
+TIMING epoch_3_eval         1.505435s
+Epoch  3: train loss=0.0748  test acc=97.46% loss=0.0859
+TIMING epoch_4_shuffle      0.032716s
+TIMING epoch_4_train        19.129480s
+TIMING epoch_4_eval         1.504443s
+Epoch  4: train loss=0.0575  test acc=97.34% loss=0.0853
+TIMING epoch_5_shuffle      0.032646s
+TIMING epoch_5_train        19.127126s
+TIMING epoch_5_eval         1.505461s
+Epoch  5: train loss=0.0458  test acc=97.45% loss=0.0876
+TIMING epoch_6_shuffle      0.030320s
+TIMING epoch_6_train        19.121270s
+TIMING epoch_6_eval         1.502337s
+Epoch  6: train loss=0.0354  test acc=97.28% loss=0.0922
+TIMING epoch_7_shuffle      0.033172s
+TIMING epoch_7_train        19.125204s
+TIMING epoch_7_eval         1.502770s
+Epoch  7: train loss=0.0286  test acc=97.93% loss=0.0709
+TIMING epoch_8_shuffle      0.033109s
+TIMING epoch_8_train        19.127570s
+TIMING epoch_8_eval         1.503245s
+Epoch  8: train loss=0.0217  test acc=97.60% loss=0.0863
+TIMING epoch_9_shuffle      0.032568s
+TIMING epoch_9_train        19.145175s
+TIMING epoch_9_eval         1.502989s
+Epoch  9: train loss=0.0178  test acc=98.01% loss=0.0753
+TIMING epoch_10_shuffle     0.032453s
+TIMING epoch_10_train       19.153583s
+TIMING epoch_10_eval        1.502240s
+Epoch 10: train loss=0.0141  test acc=97.91% loss=0.0770
+
+Epoch │ Train Loss │ Test Loss │ Test Acc
+──────┼────────────┼───────────┼─────────
+   0  │  2.3134  │  2.3134  │ 12.98%
+   1  │  0.2281  │  0.1254  │ 96.10%
+   2  │  0.1038  │  0.1100  │ 96.56%
+   3  │  0.0748  │  0.0859  │ 97.46%
+   4  │  0.0575  │  0.0853  │ 97.34%
+   5  │  0.0458  │  0.0876  │ 97.45%
+   6  │  0.0354  │  0.0922  │ 97.28%
+   7  │  0.0286  │  0.0709  │ 97.93%
+   8  │  0.0217  │  0.0863  │ 97.60%
+   9  │  0.0178  │  0.0753  │ 98.01%
+  10  │  0.0141  │  0.0770  │ 97.91%
+
+┌─ Accuracy % ────────────────────────────────────────────┐
+│102.26 │    *    *    *    *    *    *    *    *    *    *│
+│ 93.76 │                                                  │
+│ 85.26 │                                                  │
+│ 76.75 │                                                  │
+│ 68.25 │                                                  │
+│ 59.75 │                                                  │
+│ 51.24 │                                                  │
+│ 42.74 │                                                  │
+│ 34.24 │                                                  │
+│ 25.73 │                                                  │
+│ 17.23 │*                                                 │
+│  8.73 │                                                  │
+│       └──────────────────────────────────────────────────│
+│       epochs 0-10                                       │
+└───────────────────────────────────────────────────────┘
+
+┌─ Avg Loss ──────────────────────────────────────────────┐
+│  2.43 │*                                                 │
+│  2.21 │                                                  │
+│  1.98 │                                                  │
+│  1.76 │                                                  │
+│  1.54 │                                                  │
+│  1.32 │                                                  │
+│  1.10 │                                                  │
+│  0.88 │                                                  │
+│  0.66 │                                                  │
+│  0.44 │                                                  │
+│  0.22 │    *    *    *    *    *    *    *    *    *    *│
+│  0.00 │                                                  │
+│       └──────────────────────────────────────────────────│
+│       epochs 0-10                                       │
+└───────────────────────────────────────────────────────┘
+TIMING report               0.000047s
+TIMING total                209.421969s

@@ -1,0 +1,66 @@
+Model: input=784, hidden=[128], output=10
+Loading data...
+TIMING load_train           0.136095s
+TIMING load_test            0.022934s
+  train: 60000 samples
+  test:  10000 samples
+TIMING init_model           0.000465s
+TIMING baseline_eval        0.697777s
+
+Epoch 0: test acc=11.80% loss=2.3063
+TIMING epoch_1_shuffle      0.000501s
+TIMING epoch_1_train        8.518787s
+TIMING epoch_1_eval         0.700033s
+Epoch 01: train loss=0.2235  test acc=96.28% loss=0.1198
+TIMING epoch_2_shuffle      0.000474s
+TIMING epoch_2_train        8.510255s
+TIMING epoch_2_eval         0.696385s
+Epoch 02: train loss=0.1001  test acc=97.22% loss=0.0875
+TIMING epoch_3_shuffle      0.000463s
+TIMING epoch_3_train        8.505081s
+TIMING epoch_3_eval         0.700161s
+Epoch 03: train loss=0.0728  test acc=97.25% loss=0.0854
+TIMING epoch_4_shuffle      0.000478s
+TIMING epoch_4_train        8.503464s
+TIMING epoch_4_eval         0.699210s
+Epoch 04: train loss=0.0565  test acc=97.63% loss=0.0784
+TIMING epoch_5_shuffle      0.000479s
+TIMING epoch_5_train        8.510660s
+TIMING epoch_5_eval         0.696247s
+Epoch 05: train loss=0.0432  test acc=97.58% loss=0.0829
+TIMING epoch_6_shuffle      0.000481s
+TIMING epoch_6_train        8.496263s
+TIMING epoch_6_eval         0.696800s
+Epoch 06: train loss=0.0351  test acc=97.82% loss=0.0791
+TIMING epoch_7_shuffle      0.000466s
+TIMING epoch_7_train        8.511037s
+TIMING epoch_7_eval         0.696924s
+Epoch 07: train loss=0.0284  test acc=98.03% loss=0.0757
+TIMING epoch_8_shuffle      0.000482s
+TIMING epoch_8_train        8.499156s
+TIMING epoch_8_eval         0.696313s
+Epoch 08: train loss=0.0242  test acc=97.48% loss=0.0904
+TIMING epoch_9_shuffle      0.000441s
+TIMING epoch_9_train        8.493982s
+TIMING epoch_9_eval         0.699786s
+Epoch 09: train loss=0.0178  test acc=97.95% loss=0.0767
+TIMING epoch_10_shuffle     0.000459s
+TIMING epoch_10_train       8.496670s
+TIMING epoch_10_eval        0.698296s
+Epoch 10: train loss=0.0140  test acc=97.88% loss=0.0835
+
+Epoch | Train Loss | Test Loss | Test Acc
+------|------------|-----------|---------
+00000 | 00002.3063 | 0002.3063 | 0011.80%
+00001 | 00000.2235 | 0000.1198 | 0096.28%
+00002 | 00000.1001 | 0000.0875 | 0097.22%
+00003 | 00000.0728 | 0000.0854 | 0097.25%
+00004 | 00000.0565 | 0000.0784 | 0097.63%
+00005 | 00000.0432 | 0000.0829 | 0097.58%
+00006 | 00000.0351 | 0000.0791 | 0097.82%
+00007 | 00000.0284 | 0000.0757 | 0098.03%
+00008 | 00000.0242 | 0000.0904 | 0097.48%
+00009 | 00000.0178 | 0000.0767 | 0097.95%
+00010 | 00000.0140 | 0000.0835 | 0097.88%
+TIMING report               0.000011s
+TIMING total                92.887839s
