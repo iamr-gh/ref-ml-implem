@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """
-Download the MNIST dataset and save each image as a 28x28 grayscale PNG.
+Download the MNIST dataset and export in two formats:
 
-Output structure:
-    data/train/<label>/<index>.png
-    data/test/<label>/<index>.png
+1. PNGs:     data/train/<label>/<index>.png  (for visual inspection)
+2. Binary:   data/train.bin, data/test.bin   (for fast Nim loading)
 
-Dependencies:
+Binary format (.bin):
+    [uint32 num_images]
+    [uint32 rows]          (28)
+    [uint32 cols]          (28)
+    [float32[num_images * rows * cols] pixels]   (normalized 0-1)
+    [uint8[num_images] labels]                   (0-9)
+
+Dependencies for PNG export:
     pip install pypng
 """
 
@@ -78,6 +84,21 @@ def write_pngs(labels, data, num_images, rows, cols, output_dir):
             print(f"    {i + 1}/{num_images}")
 
 
+def write_bin(labels, data, num_images, rows, cols, out_path):
+    """Write binary format for fast Nim loading."""
+    pixels_per_image = rows * cols
+    with open(out_path, "wb") as f:
+        # Header: num_images, rows, cols
+        f.write(struct.pack("<III", num_images, rows, cols))
+        # Pixels as float32, normalized to [0, 1]
+        for i in range(num_images * pixels_per_image):
+            f.write(struct.pack("<f", data[i] / 255.0))
+        # Labels as uint8
+        for i in range(num_images):
+            f.write(struct.pack("B", labels[i]))
+    print(f"  wrote {out_path} ({os.path.getsize(out_path) / 1e6:.1f} MB)")
+
+
 def main():
     os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -100,10 +121,16 @@ def main():
         assert len(labels) == num_images, "Mismatch between images and labels count"
         print(f"  {num_images} images, {rows}x{cols}")
 
+        # Write PNGs
         output_dir = os.path.join(DATA_DIR, split_dir_name)
         write_pngs(labels, data, num_images, rows, cols, output_dir)
 
+        # Write binary format
+        bin_path = os.path.join(DATA_DIR, f"{split}.bin")
+        write_bin(labels, data, num_images, rows, cols, bin_path)
+
     print(f"\nDone! PNGs saved to {DATA_DIR}/{{train,test}}/<label>/<index>.png")
+    print(f"Binary files saved to {DATA_DIR}/{{train,test}}.bin")
 
     # Clean up raw .gz files
     print("Cleaning up raw downloads...")
