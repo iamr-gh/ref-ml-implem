@@ -79,36 +79,31 @@ proc argmaxDyn(x: openArray[float32]): int =
       bestVal = x[i]
   best
 
-proc forward*(m: Mlp; x: openArray[float32]; ws: var MlpWorkspace): lent seq[float32] =
-  ## Fill workspace activations and return output probabilities.
+proc forward*(m: Mlp; x: openArray[float32]; ws: var MlpWorkspace) =
+  ## Fill workspace activations; output probabilities are ws.activations[^1].
   for i in 0 ..< x.len:
     ws.activations[0][i] = x[i]
 
   for li, layer in m.layers:
-    let prev = ws.activations[li]
-    var outv = ws.activations[li + 1]
-
     for j in 0 ..< layer.outDim:
       var s = layer.b[j]
       for i in 0 ..< layer.inDim:
-        s += prev[i] * layer.w[i * layer.outDim + j]
-      outv[j] = s
+        s += ws.activations[li][i] * layer.w[i * layer.outDim + j]
+      ws.activations[li + 1][j] = s
 
     if li < m.layers.len - 1:
-      for j in 0 ..< outv.len: outv[j] = relu(outv[j])
+      for j in 0 ..< layer.outDim:
+        ws.activations[li + 1][j] = relu(ws.activations[li + 1][j])
     else:
-      softmaxDyn(outv)
-
-  ws.activations[^1]
-
-proc predictProbs*(m: Mlp; x: openArray[float32]; ws: var MlpWorkspace): lent seq[float32] =
-  m.forward(x, ws)
+      softmaxDyn(ws.activations[li + 1])
 
 proc predict*(m: Mlp; x: openArray[float32]; ws: var MlpWorkspace): int =
-  argmaxDyn(m.predictProbs(x, ws))
+  m.forward(x, ws)
+  argmaxDyn(ws.activations[^1])
 
 proc trainOne*(m: var Mlp; x: openArray[float32]; y: int; lr: float32; ws: var MlpWorkspace): float32 =
-  let probs = m.forward(x, ws)
+  m.forward(x, ws)
+  let probs = ws.activations[^1]
   result = crossEntropyDyn(probs, y)
 
   # Output delta = softmax probs - oneHot(y)
@@ -118,25 +113,21 @@ proc trainOne*(m: var Mlp; x: openArray[float32]; y: int; lr: float32; ws: var M
   ws.deltas[lastLi][y] -= 1.0'f32
 
   for li in countdown(m.layers.len - 1, 0):
-    let prev = ws.activations[li]
-    let delta = ws.deltas[li]
-
     if li > 0:
-      var prevDelta = ws.deltas[li - 1]
       # Compute with current weights before updating them.
       for i in 0 ..< m.layers[li].inDim:
         var s: float32 = 0
         for j in 0 ..< m.layers[li].outDim:
-          s += m.layers[li].w[i * m.layers[li].outDim + j] * delta[j]
-        prevDelta[i] = if prev[i] > 0: s else: 0
+          s += m.layers[li].w[i * m.layers[li].outDim + j] * ws.deltas[li][j]
+        ws.deltas[li - 1][i] = if ws.activations[li][i] > 0: s else: 0
 
     # SGD update for this layer.
     for i in 0 ..< m.layers[li].inDim:
-      let xi = prev[i]
+      let xi = ws.activations[li][i]
       for j in 0 ..< m.layers[li].outDim:
-        m.layers[li].w[i * m.layers[li].outDim + j] -= lr * xi * delta[j]
+        m.layers[li].w[i * m.layers[li].outDim + j] -= lr * xi * ws.deltas[li][j]
     for j in 0 ..< m.layers[li].outDim:
-      m.layers[li].b[j] -= lr * delta[j]
+      m.layers[li].b[j] -= lr * ws.deltas[li][j]
 
 proc trainEpoch*[I: static int](m: var Mlp; ds: Dataset[I]; lr: float32; ws: var MlpWorkspace): float32 =
   var total: float32 = 0
@@ -148,7 +139,8 @@ proc evaluate*[I: static int](m: Mlp; ds: Dataset[I]; ws: var MlpWorkspace): Met
   var correct = 0
   var totalLoss: float32 = 0
   for i in 0 ..< ds.len:
-    let probs = m.predictProbs(ds.sample(i), ws)
+    m.forward(ds.sample(i), ws)
+    let probs = ws.activations[^1]
     let y = ds.label(i)
     totalLoss += crossEntropyDyn(probs, y)
     if argmaxDyn(probs) == y: inc correct

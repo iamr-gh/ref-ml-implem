@@ -17,14 +17,16 @@ type
 
 proc len*[N: static int](ds: Dataset[N]): int = ds.n
 
-proc sample*[N: static int](ds: Dataset[N]; logicalIdx: int): openArray[float32] =
-  let actual = if ds.order.len == 0: logicalIdx else: ds.order[logicalIdx]
-  let offset = actual * N
-  ds.xs.toOpenArray(offset, offset + N - 1)
+template sample*[N: static int](ds: Dataset[N]; logicalIdx: int): untyped =
+  block:
+    let actual = if ds.order.len == 0: logicalIdx else: ds.order[logicalIdx]
+    let offset = actual * N
+    ds.xs.toOpenArray(offset, offset + N - 1)
 
-proc label*[N: static int](ds: Dataset[N]; logicalIdx: int): int =
-  let actual = if ds.order.len == 0: logicalIdx else: ds.order[logicalIdx]
-  ds.ys[actual]
+template label*[N: static int](ds: Dataset[N]; logicalIdx: int): int =
+  block:
+    let actual = if ds.order.len == 0: logicalIdx else: ds.order[logicalIdx]
+    ds.ys[actual]
 
 proc readU32Le(buf: string; offset: var int): uint32 {.inline.} =
   result = uint32(buf[offset].ord) or
