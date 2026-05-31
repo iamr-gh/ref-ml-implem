@@ -9,7 +9,7 @@
 ## parameters participate in forward inference and can be extended with full
 ## backprop later.
 
-import std/[math, random]
+import std/[math]
 
 {.push checks: off.}
 
@@ -53,14 +53,21 @@ type
 proc relu(x: float32): float32 {.inline.} =
   if x > 0'f32: x else: 0'f32
 
-proc initLinear*(inDim, outDim: int; reluScale = true): Linear =
+proc nextRand(seed: var uint32): float32 {.inline.} =
+  seed = seed * 1664525'u32 + 1013904223'u32
+  float32(seed shr 8) / float32(1'u32 shl 24)
+
+proc randRange(seed: var uint32; lo, hi: float32): float32 {.inline.} =
+  lo + (hi - lo) * nextRand(seed)
+
+proc initLinear*(inDim, outDim: int; seed: var uint32; reluScale = true): Linear =
   result.inDim = inDim
   result.outDim = outDim
   result.w = newSeq[float32](inDim * outDim)
   result.b = newSeq[float32](outDim)
   let scale = if reluScale: sqrt(2.0'f32 / float32(inDim)) else: sqrt(1.0'f32 / float32(inDim))
   for i in 0 ..< result.w.len:
-    result.w[i] = rand(2.0'f32 * scale) - scale
+    result.w[i] = randRange(seed, -scale, scale)
 
 proc initTransformer*(vocabSize, seqLen: int; dModel = DefaultDModel; nHeads = DefaultHeads; nBlocks = DefaultBlocks; ffDim = DefaultFFDim): Transformer =
   doAssert dModel mod nHeads == 0
@@ -72,24 +79,26 @@ proc initTransformer*(vocabSize, seqLen: int; dModel = DefaultDModel; nHeads = D
   result.nBlocks = nBlocks
   result.ffDim = ffDim
 
+  var seed = 123456789'u32
+
   result.tokenEmb = newSeq[float32](vocabSize * dModel)
   result.posEmb = newSeq[float32](seqLen * dModel)
   let embScale = 0.02'f32
   for i in 0 ..< result.tokenEmb.len:
-    result.tokenEmb[i] = rand(2.0'f32 * embScale) - embScale
+    result.tokenEmb[i] = randRange(seed, -embScale, embScale)
   for i in 0 ..< result.posEmb.len:
-    result.posEmb[i] = rand(2.0'f32 * embScale) - embScale
+    result.posEmb[i] = randRange(seed, -embScale, embScale)
 
   result.blocks = newSeq[Block](nBlocks)
   for i in 0 ..< nBlocks:
-    result.blocks[i].q = initLinear(dModel, dModel, false)
-    result.blocks[i].k = initLinear(dModel, dModel, false)
-    result.blocks[i].v = initLinear(dModel, dModel, false)
-    result.blocks[i].o = initLinear(dModel, dModel, false)
-    result.blocks[i].ff1 = initLinear(dModel, ffDim, true)
-    result.blocks[i].ff2 = initLinear(ffDim, dModel, false)
+    result.blocks[i].q = initLinear(dModel, dModel, seed, false)
+    result.blocks[i].k = initLinear(dModel, dModel, seed, false)
+    result.blocks[i].v = initLinear(dModel, dModel, seed, false)
+    result.blocks[i].o = initLinear(dModel, dModel, seed, false)
+    result.blocks[i].ff1 = initLinear(dModel, ffDim, seed, true)
+    result.blocks[i].ff2 = initLinear(ffDim, dModel, seed, false)
 
-  result.head = initLinear(dModel, vocabSize, false)
+  result.head = initLinear(dModel, vocabSize, seed, false)
 
 proc initWorkspace*(m: Transformer): Workspace =
   result.x = newSeq[float32](m.seqLen * m.dModel)

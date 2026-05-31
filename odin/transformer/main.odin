@@ -7,7 +7,6 @@ import "core:os"
 import "core:strconv"
 import "core:strings"
 import "core:time"
-import rand "core:math/rand"
 
 DEFAULT_D_MODEL :: 64
 DEFAULT_HEADS :: 4
@@ -285,9 +284,11 @@ free_corpus :: proc(c: Corpus) {
 }
 
 shuffle_corpus :: proc(c: ^Corpus) {
+	seed := u32(246813579)
 	i := c.n - 1
 	for i > 0 {
-		j := rand.int_max(i + 1)
+		seed = seed * 1664525 + 1013904223
+		j := int(seed % u32(i + 1))
 		c.order[i], c.order[j] = c.order[j], c.order[i]
 		i -= 1
 	}
@@ -303,6 +304,22 @@ relu :: proc(x: f32) -> f32 {
 }
 
 init_linear :: proc(in_dim, out_dim: int, relu_scale: bool = true) -> Linear {
+	// Deprecated wrapper kept for readability; deterministic init uses
+	// init_linear_seeded below.
+	seed := u32(123456789)
+	return init_linear_seeded(in_dim, out_dim, &seed, relu_scale)
+}
+
+next_rand :: proc(seed: ^u32) -> f32 {
+	seed^ = seed^ * 1664525 + 1013904223
+	return f32(seed^ >> 8) / f32(1 << 24)
+}
+
+rand_range :: proc(seed: ^u32, lo, hi: f32) -> f32 {
+	return lo + (hi - lo) * next_rand(seed)
+}
+
+init_linear_seeded :: proc(in_dim, out_dim: int, seed: ^u32, relu_scale: bool = true) -> Linear {
 	l: Linear
 	l.in_dim = in_dim
 	l.out_dim = out_dim
@@ -315,7 +332,7 @@ init_linear :: proc(in_dim, out_dim: int, relu_scale: bool = true) -> Linear {
 		scale = f32(math.sqrt_f32(1.0 / f32(in_dim)))
 	}
 	for i in 0 ..< len(l.w) {
-		l.w[i] = rand.float32_range(-scale, scale)
+		l.w[i] = rand_range(seed, -scale, scale)
 	}
 	return l
 }
@@ -339,23 +356,24 @@ init_transformer :: proc(vocab_size, seq_len, d_model, n_heads, n_blocks, ff_dim
 	m.d_head = d_model / n_heads
 	m.n_blocks = n_blocks
 	m.ff_dim = ff_dim
+	seed := u32(123456789)
 
 	m.token_emb = make([]f32, vocab_size * d_model)
 	m.pos_emb = make([]f32, seq_len * d_model)
 	emb_scale := f32(0.02)
-	for i in 0 ..< len(m.token_emb) do m.token_emb[i] = rand.float32_range(-emb_scale, emb_scale)
-	for i in 0 ..< len(m.pos_emb) do m.pos_emb[i] = rand.float32_range(-emb_scale, emb_scale)
+	for i in 0 ..< len(m.token_emb) do m.token_emb[i] = rand_range(&seed, -emb_scale, emb_scale)
+	for i in 0 ..< len(m.pos_emb) do m.pos_emb[i] = rand_range(&seed, -emb_scale, emb_scale)
 
 	m.blocks = make([]Block, n_blocks)
 	for i in 0 ..< n_blocks {
-		m.blocks[i].q = init_linear(d_model, d_model, false)
-		m.blocks[i].k = init_linear(d_model, d_model, false)
-		m.blocks[i].v = init_linear(d_model, d_model, false)
-		m.blocks[i].o = init_linear(d_model, d_model, false)
-		m.blocks[i].ff1 = init_linear(d_model, ff_dim, true)
-		m.blocks[i].ff2 = init_linear(ff_dim, d_model, false)
+		m.blocks[i].q = init_linear_seeded(d_model, d_model, &seed, false)
+		m.blocks[i].k = init_linear_seeded(d_model, d_model, &seed, false)
+		m.blocks[i].v = init_linear_seeded(d_model, d_model, &seed, false)
+		m.blocks[i].o = init_linear_seeded(d_model, d_model, &seed, false)
+		m.blocks[i].ff1 = init_linear_seeded(d_model, ff_dim, &seed, true)
+		m.blocks[i].ff2 = init_linear_seeded(ff_dim, d_model, &seed, false)
 	}
-	m.head = init_linear(d_model, vocab_size, false)
+	m.head = init_linear_seeded(d_model, vocab_size, &seed, false)
 	return m
 }
 

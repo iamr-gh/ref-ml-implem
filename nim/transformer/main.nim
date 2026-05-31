@@ -4,7 +4,7 @@
 ##   nim c -d:release -r main.nim
 ##   ./main 64 4 2 256   # dModel heads blocks ffDim
 
-import std/[strformat, random, os, strutils, times]
+import std/[strformat, os, strutils, times]
 import data, model, tokenizer
 
 const
@@ -53,7 +53,6 @@ proc timed(label: string; body: proc()) =
 
 when isMainModule:
   let totalT0 = cpuTime()
-  randomize()
 
   let cfg = parseConfig()
   echo fmt"Transformer LM: dModel={cfg.dModel}, heads={cfg.heads}, blocks={cfg.blocks}, ffDim={cfg.ffDim}"
