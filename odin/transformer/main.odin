@@ -5,6 +5,7 @@ import "core:math"
 import "core:mem"
 import "core:os"
 import "core:strconv"
+import "core:strings"
 import "core:time"
 import rand "core:math/rand"
 
@@ -16,6 +17,182 @@ EPOCHS :: 2
 LR :: f32(0.001)
 MAX_TRAIN_SEQ :: 2
 MAX_EVAL_SEQ :: 1
+
+Tokenizer :: struct {
+	token_to_id: map[string]int,
+	id_to_bytes: []string,
+	byte_to_token: [256]string,
+	pair_rank: map[string]int,
+	vocab_size: int,
+}
+
+hex_digit :: proc(c: byte) -> int {
+	if c >= '0' && c <= '9' do return int(c - '0')
+	if c >= 'a' && c <= 'f' do return 10 + int(c - 'a')
+	if c >= 'A' && c <= 'F' do return 10 + int(c - 'A')
+	return 0
+}
+
+hex_to_string :: proc(hex: string) -> string {
+	buf := make([]byte, len(hex)/2)
+	for i := 0; i < len(buf); i += 1 {
+		buf[i] = byte((hex_digit(hex[2*i]) << 4) | hex_digit(hex[2*i+1]))
+	}
+	return string(buf)
+}
+
+pair_key :: proc(a, b: string) -> string {
+	buf := make([]byte, len(a) + 1 + len(b))
+	copy(buf[0:len(a)], a)
+	buf[len(a)] = '\t'
+	copy(buf[len(a)+1:], b)
+	return string(buf)
+}
+
+load_tokenizer :: proc(dir: string = "data") -> Tokenizer {
+	t: Tokenizer
+	t.token_to_id = make(map[string]int, 60000)
+	t.pair_rank = make(map[string]int, 60000)
+	t.id_to_bytes = make([]string, 50257)
+
+	// byte_encoder.tsv: byte<TAB>hex(token_string_utf8)
+	path := fmt.tprintf("%s/byte_encoder.tsv", dir)
+	bytes, ok := os.read_entire_file(path)
+	if !ok { fmt.eprintf("failed to read %s\n", path); os.exit(1) }
+	text := string(bytes)
+	for line in strings.split_lines_iterator(&text) {
+		if len(line) == 0 do continue
+		parts := strings.split(line, "\t")
+		if len(parts) >= 2 {
+			b, _ := strconv.parse_int(parts[0])
+			t.byte_to_token[b] = hex_to_string(parts[1])
+		}
+		delete(parts)
+	}
+	delete(bytes)
+
+	// encoder.tsv: id<TAB>hex(token_string_utf8)<TAB>hex(decoded_bytes)
+	path = fmt.tprintf("%s/encoder.tsv", dir)
+	bytes, ok = os.read_entire_file(path)
+	if !ok { fmt.eprintf("failed to read %s\n", path); os.exit(1) }
+	text = string(bytes)
+	max_id := 0
+	for line in strings.split_lines_iterator(&text) {
+		if len(line) == 0 do continue
+		parts := strings.split(line, "\t")
+		if len(parts) >= 3 {
+			id, _ := strconv.parse_int(parts[0])
+			tok := hex_to_string(parts[1])
+			decoded := hex_to_string(parts[2])
+			t.id_to_bytes[id] = decoded
+			t.token_to_id[tok] = id
+			if id > max_id do max_id = id
+		}
+		delete(parts)
+	}
+	t.vocab_size = max_id + 1
+	delete(bytes)
+
+	// merges.tsv: rank<TAB>hex(left)<TAB>hex(right)
+	path = fmt.tprintf("%s/merges.tsv", dir)
+	bytes, ok = os.read_entire_file(path)
+	if !ok { fmt.eprintf("failed to read %s\n", path); os.exit(1) }
+	text = string(bytes)
+	for line in strings.split_lines_iterator(&text) {
+		if len(line) == 0 do continue
+		parts := strings.split(line, "\t")
+		if len(parts) >= 3 {
+			rank, _ := strconv.parse_int(parts[0])
+			a := hex_to_string(parts[1])
+			b := hex_to_string(parts[2])
+			t.pair_rank[pair_key(a, b)] = rank
+		}
+		delete(parts)
+	}
+	delete(bytes)
+	return t
+}
+
+is_space_byte :: proc(c: byte) -> bool { return c == ' ' || c == '\n' || c == '\r' || c == '\t' }
+is_alnum_byte :: proc(c: byte) -> bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') }
+
+bpe_piece :: proc(t: Tokenizer, piece: string) -> [dynamic]string {
+	syms := make([dynamic]string)
+	for i in 0 ..< len(piece) {
+		append(&syms, t.byte_to_token[int(piece[i])])
+	}
+
+	for len(syms) > 1 {
+		best_rank := max(int)
+		best_idx := -1
+		for i in 0 ..< len(syms)-1 {
+			key := pair_key(syms[i], syms[i+1])
+			if r, ok := t.pair_rank[key]; ok {
+				if r < best_rank { best_rank = r; best_idx = i }
+			}
+		}
+		if best_idx < 0 do break
+
+		merged := strings.concatenate({syms[best_idx], syms[best_idx+1]})
+		next := make([dynamic]string)
+		i := 0
+		for i < len(syms) {
+			if i == best_idx {
+				append(&next, merged)
+				i += 2
+			} else {
+				append(&next, syms[i])
+				i += 1
+			}
+		}
+		delete(syms)
+		syms = next
+	}
+	return syms
+}
+
+encode_append_piece :: proc(t: Tokenizer, piece: string, out: ^[dynamic]i32) {
+	syms := bpe_piece(t, piece)
+	defer delete(syms)
+	for s in syms {
+		if id, ok := t.token_to_id[s]; ok {
+			append(out, i32(id))
+		} else {
+			for i in 0 ..< len(s) {
+				one := t.byte_to_token[int(s[i])]
+				append(out, i32(t.token_to_id[one]))
+			}
+		}
+	}
+}
+
+encode :: proc(t: Tokenizer, text: string) -> [dynamic]i32 {
+	out := make([dynamic]i32)
+	i := 0
+	for i < len(text) {
+		start := i
+		if text[i] == ' ' && i+1 < len(text) && is_alnum_byte(text[i+1]) {
+			i += 1
+			for i < len(text) && is_alnum_byte(text[i]) do i += 1
+			encode_append_piece(t, text[start:i], &out)
+		} else if is_alnum_byte(text[i]) {
+			for i < len(text) && is_alnum_byte(text[i]) do i += 1
+			encode_append_piece(t, text[start:i], &out)
+		} else if is_space_byte(text[i]) {
+			for i < len(text) && is_space_byte(text[i]) && !(text[i] == ' ' && i+1 < len(text) && is_alnum_byte(text[i+1])) do i += 1
+			encode_append_piece(t, text[start:i], &out)
+		} else {
+			encode_append_piece(t, text[i:i+1], &out)
+			i += 1
+		}
+	}
+	return out
+}
+
+decode_id :: proc(t: Tokenizer, id: int) -> string {
+	if id >= 0 && id < len(t.id_to_bytes) do return t.id_to_bytes[id]
+	return "<?>"
+}
 
 Corpus :: struct {
 	tokens: []i32,   // flat: sequence i starts at i*seq_len
@@ -76,45 +253,29 @@ print_timing :: proc(label: string, seconds: f64) {
 	fmt.printf("TIMING %-20s %.6fs\n", label, seconds)
 }
 
-read_u32_le :: proc(data: []byte, offset: ^int) -> u32 {
-	i := offset^
-	v := u32(data[i]) | (u32(data[i+1]) << 8) | (u32(data[i+2]) << 16) | (u32(data[i+3]) << 24)
-	offset^ += 4
-	return v
-}
-
-read_i32_le :: proc(data: []byte, offset: ^int) -> i32 {
-	return transmute(i32)read_u32_le(data, offset)
-}
-
-load_corpus :: proc(path: string) -> Corpus {
+load_corpus :: proc(path: string, tok: Tokenizer, seq_len: int) -> Corpus {
 	bytes, ok := os.read_entire_file(path)
 	if !ok {
 		fmt.eprintf("failed to read %s\n", path)
 		os.exit(1)
 	}
-	defer delete(bytes)
-
-	offset := 0
-	num_seq := int(read_u32_le(bytes, &offset))
-	seq_len := int(read_u32_le(bytes, &offset))
-	vocab_size := int(read_u32_le(bytes, &offset))
+	text := string(bytes)
+	encoded := encode(tok, text)
 
 	c: Corpus
-	c.n = num_seq
 	c.seq_len = seq_len
-	c.vocab_size = vocab_size
-	c.tokens = make([]i32, num_seq * seq_len)
-	c.order = make([]int, num_seq)
-
-	for i in 0 ..< num_seq * seq_len {
-		c.tokens[i] = read_i32_le(bytes, &offset)
-	}
-	for i in 0 ..< num_seq {
+	c.vocab_size = tok.vocab_size
+	c.n = max(0, len(encoded) - seq_len)
+	c.tokens = make([]i32, len(encoded))
+	copy(c.tokens, encoded[:])
+	c.order = make([]int, c.n)
+	for i in 0 ..< c.n {
 		c.order[i] = i
 	}
+	delete(encoded)
+	delete(bytes)
 
-	fmt.printf("  Loaded %s: %d sequences, seqLen=%d, vocabSize=%d\n", path, num_seq, seq_len, vocab_size)
+	fmt.printf("  Loaded %s: %d tokens, %d sequences, seqLen=%d, vocabSize=%d\n", path, len(c.tokens), c.n, seq_len, c.vocab_size)
 	return c
 }
 
@@ -134,8 +295,7 @@ shuffle_corpus :: proc(c: ^Corpus) {
 
 sequence :: proc(c: Corpus, idx: int) -> []i32 {
 	actual := c.order[idx]
-	offset := actual * c.seq_len
-	return c.tokens[offset:offset+c.seq_len]
+	return c.tokens[actual:actual+c.seq_len]
 }
 
 relu :: proc(x: f32) -> f32 {
@@ -419,6 +579,21 @@ evaluate_one :: proc(m: Transformer, tokens: []i32, ws: ^Workspace) -> Metrics {
 	return Metrics{loss = total_loss / f32(T), accuracy = f32(correct) / f32(T)}
 }
 
+best_next_token :: proc(m: Transformer, tokens: []i32, ws: ^Workspace) -> int {
+	forward(m, tokens, ws)
+	t := min(len(tokens), m.seq_len) - 1
+	base := t * m.vocab_size
+	best_id := 0
+	best := ws.logits[base]
+	for j in 1 ..< m.vocab_size {
+		if ws.logits[base + j] > best {
+			best = ws.logits[base + j]
+			best_id = j
+		}
+	}
+	return best_id
+}
+
 eval_some :: proc(m: Transformer, c: Corpus, ws: ^Workspace) -> Metrics {
 	n := min(MAX_EVAL_SEQ, c.n)
 	total_loss: f32
@@ -478,10 +653,15 @@ main :: proc() {
 	total_t0 := time.tick_now()
 	d_model, heads, blocks, ff_dim := parse_config()
 	fmt.printf("Transformer LM: dModel=%d, heads=%d, blocks=%d, ffDim=%d\n", d_model, heads, blocks, ff_dim)
-	fmt.println("Loading tokenized Shakespeare...")
+	fmt.println("Loading GPT-2 tokenizer assets...")
 
 	t0 := time.tick_now()
-	corpus := load_corpus("data/shakespeare.bin")
+	tok := load_tokenizer("data")
+	print_timing("load_tokenizer", seconds_since(t0))
+
+	fmt.println("Tokenizing Shakespeare natively...")
+	t0 = time.tick_now()
+	corpus := load_corpus("data/input.txt", tok, 64)
 	print_timing("load_corpus", seconds_since(t0))
 	defer free_corpus(corpus)
 
@@ -537,5 +717,12 @@ main :: proc() {
 	t0 = time.tick_now()
 	print_table(history)
 	print_timing("report", seconds_since(t0))
+
+	prompt := "To be"
+	prompt_ids := encode(tok, prompt)
+	next_id := best_next_token(net, prompt_ids[:], &ws)
+	fmt.printf("Prompt: %q -> next token id=%d decoded=%q\n", prompt, next_id, decode_id(tok, next_id))
+	delete(prompt_ids)
+
 	print_timing("total", seconds_since(total_t0))
 }

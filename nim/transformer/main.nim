@@ -5,7 +5,7 @@
 ##   ./main 64 4 2 256   # dModel heads blocks ffDim
 
 import std/[strformat, random, os, strutils, times]
-import data, model
+import data, model, tokenizer
 
 const
   Epochs = 2
@@ -58,8 +58,11 @@ when isMainModule:
   let cfg = parseConfig()
   echo fmt"Transformer LM: dModel={cfg.dModel}, heads={cfg.heads}, blocks={cfg.blocks}, ffDim={cfg.ffDim}"
 
-  echo "Loading tokenized Shakespeare..."
-  var corpus = timed("load_corpus", proc(): Corpus = loadCorpus("data/shakespeare.bin"))
+  echo "Loading GPT-2 tokenizer assets..."
+  let tok = timed("load_tokenizer", proc(): Tokenizer = loadTokenizer("data"))
+
+  echo "Tokenizing Shakespeare natively..."
+  var corpus = timed("load_corpus", proc(): Corpus = loadCorpus("data/input.txt", tok, 64))
 
   var net = timed("init_model", proc(): Transformer =
     initTransformer(corpus.vocabSize, corpus.seqLen, cfg.dModel, cfg.heads, cfg.blocks, cfg.ffDim)
@@ -97,4 +100,10 @@ when isMainModule:
     echo fmt"Epoch {epoch:2d}: train loss={trainLoss:.4f}  eval acc={100.0 * metrics.accuracy:5.2f}% loss={metrics.loss:.4f}"
 
   timed("report", proc() = printTable(history))
+
+  let prompt = "To be"
+  let promptIds = tok.encode(prompt)
+  let nextId = net.bestNextToken(promptIds, ws)
+  echo fmt"Prompt: {prompt.repr} -> next token id={nextId} decoded={tok.decodeId(nextId).repr}"
+
   echo fmt"TIMING total                {cpuTime() - totalT0:.6f}s"

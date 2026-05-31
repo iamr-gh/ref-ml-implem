@@ -1,48 +1,76 @@
 #!/usr/bin/env python3
-"""Download Shakespeare text, tokenize with GPT-2 BPE, and write binary format.
+"""Download Tiny Shakespeare and GPT-2 tokenizer assets.
 
-Binary format (all little-endian):
-  [uint32 num_sequences] [uint32 seq_len] [uint32 vocab_size]
-  [int32[num_sequences * seq_len] tokens]
+No tokenization happens here. The Nim/Odin programs load these assets and perform
+native byte-level GPT-2 BPE encode/decode themselves.
 
-Each sequence is seq_len consecutive tokens from the corpus (overlapping sliding window).
+Outputs under data/:
+  input.txt          raw Shakespeare corpus
+  encoder.tsv        token_id<TAB>hex(token_string_utf8)<TAB>hex(decoded_bytes)
+  byte_encoder.tsv   byte_value<TAB>hex(token_string_utf8)
+  merges.tsv         rank<TAB>hex(left_token_utf8)<TAB>hex(right_token_utf8)
 """
 
-import struct
+import json
 import urllib.request
 from pathlib import Path
 
-import tiktoken
+SHAKESPEARE_URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+ENCODER_URL = "https://openaipublic.blob.core.windows.net/gpt-2/models/124M/encoder.json"
+MERGES_URL = "https://openaipublic.blob.core.windows.net/gpt-2/models/124M/vocab.bpe"
 
-URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
-SEQ_LEN = 64  # context window size
+
+def bytes_to_unicode():
+    bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+    cs = bs[:]
+    n = 0
+    for b in range(256):
+        if b not in bs:
+            bs.append(b)
+            cs.append(256 + n)
+            n += 1
+    return {b: chr(c) for b, c in zip(bs, cs)}
 
 
 def main():
-    print("Downloading Shakespeare text...")
-    resp = urllib.request.urlopen(URL)
-    text = resp.read().decode("utf-8")
-    print(f"  Corpus size: {len(text)} chars")
+    data = Path("data")
+    data.mkdir(exist_ok=True)
 
-    print("Tokenizing with GPT-2 BPE...")
-    enc = tiktoken.get_encoding("gpt2")
-    tokens = enc.encode(text)
-    vocab_size = enc.n_vocab
-    print(f"  Tokens: {len(tokens)}, vocab_size: {vocab_size}")
+    print("Downloading Tiny Shakespeare...")
+    text = urllib.request.urlopen(SHAKESPEARE_URL).read()
+    (data / "input.txt").write_bytes(text)
+    print(f"  wrote data/input.txt ({len(text)} bytes)")
 
-    # Create overlapping sequences: sequence i starts at token i
-    num_sequences = max(0, len(tokens) - SEQ_LEN)
-    print(f"  Sequences: {num_sequences} (seq_len={SEQ_LEN})")
+    print("Downloading GPT-2 encoder.json...")
+    encoder = json.loads(urllib.request.urlopen(ENCODER_URL).read().decode("utf-8"))
 
-    out_path = "data/shakespeare.bin"
-    Path("data").mkdir(exist_ok=True)
-    print(f"Writing {out_path}...")
-    with open(out_path, "wb") as f:
-        f.write(struct.pack("<III", num_sequences, SEQ_LEN, vocab_size))
-        for i in range(num_sequences):
-            f.write(struct.pack(f"<{SEQ_LEN}i", *tokens[i : i + SEQ_LEN]))
+    byte_encoder = bytes_to_unicode()
+    byte_decoder = {v: k for k, v in byte_encoder.items()}
 
-    print("Done.")
+    print("Writing encoder.tsv...")
+    with (data / "encoder.tsv").open("w", encoding="utf-8") as f:
+        for token, idx in sorted(encoder.items(), key=lambda kv: kv[1]):
+            decoded = bytes(byte_decoder[ch] for ch in token)
+            f.write(f"{idx}\t{token.encode('utf-8').hex()}\t{decoded.hex()}\n")
+
+    print("Writing byte_encoder.tsv...")
+    with (data / "byte_encoder.tsv").open("w", encoding="utf-8") as f:
+        for b in range(256):
+            f.write(f"{b}\t{byte_encoder[b].encode('utf-8').hex()}\n")
+
+    print("Downloading GPT-2 vocab.bpe...")
+    merges_text = urllib.request.urlopen(MERGES_URL).read().decode("utf-8")
+    print("Writing merges.tsv...")
+    rank = 0
+    with (data / "merges.tsv").open("w", encoding="utf-8") as f:
+        for line in merges_text.splitlines():
+            if not line or line.startswith("#"):
+                continue
+            a, b = line.split()
+            f.write(f"{rank}\t{a.encode('utf-8').hex()}\t{b.encode('utf-8').hex()}\n")
+            rank += 1
+
+    print(f"Done. vocab={len(encoder)}, merges={rank}")
 
 
 if __name__ == "__main__":

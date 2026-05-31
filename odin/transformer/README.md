@@ -2,27 +2,29 @@
 
 A minimal GPT-style transformer language model in the same style as `odin/mnist`:
 single-file implementation, explicit memory management, flat buffers, and native
-binary parsing.
+tokenizer/data parsing.
 
-## Data
+## Data and tokenizer assets
 
-`download_data.py` downloads Tiny Shakespeare and tokenizes it with the GPT-2 tokenizer
-via `tiktoken`, writing `data/shakespeare.bin`.
+`download_data.py` downloads Tiny Shakespeare plus the public GPT-2 tokenizer assets
+and converts them to simple TSV files. It does **not** tokenize the corpus and does
+not require `tiktoken`.
 
 ```sh
-python3 -m venv .venv
-.venv/bin/pip install tiktoken
-.venv/bin/python download_data.py
+python3 download_data.py
 ```
 
-The Odin code parses the binary format natively:
+Outputs under `data/`:
 
 ```text
-uint32 num_sequences
-uint32 seq_len
-uint32 vocab_size
-int32[num_sequences * seq_len] token_ids
+input.txt          raw Shakespeare corpus
+encoder.tsv        token_id, token bytes, decoded bytes
+byte_encoder.tsv   GPT-2 byte-to-unicode table
+merges.tsv         GPT-2 BPE merge ranks
 ```
+
+The Odin runtime loads these assets and performs byte-level GPT-2 BPE encode/decode
+natively.
 
 ## Run
 

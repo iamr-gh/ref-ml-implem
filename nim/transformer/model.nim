@@ -254,4 +254,15 @@ proc evaluate*(m: Transformer; tokens: openArray[int32]; ws: var Workspace): Met
   result.loss = totalLoss / float32(T)
   result.accuracy = float32(correct) / float32(T)
 
+proc bestNextToken*(m: Transformer; tokens: openArray[int32]; ws: var Workspace): int =
+  m.forward(tokens, ws)
+  let t = min(tokens.len, m.seqLen) - 1
+  let base = t * m.vocabSize
+  result = 0
+  var best = ws.logits[base]
+  for j in 1 ..< m.vocabSize:
+    if ws.logits[base + j] > best:
+      best = ws.logits[base + j]
+      result = j
+
 {.pop.}

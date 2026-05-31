@@ -1,17 +1,17 @@
-## Shakespeare tokenized dataset loading for transformer.
+## Corpus construction for transformer language modeling.
 ##
-## Binary format (little-endian):
-##   [uint32 num_sequences] [uint32 seq_len] [uint32 vocab_size]
-##   [int32[num_sequences * seq_len] tokens]
+## Raw text is tokenized natively with tokenizer.nim. No pre-tokenized binary or
+## Python tokenizer runtime is needed.
 
 import std/[strformat, random]
+import tokenizer
 
 type
   Corpus* = object
-    tokens*: seq[int32]    # flat: sequence i starts at i*seqLen
+    tokens*: seq[int32]    # flat: all token ids
     seqLen*: int
     vocabSize*: int
-    n*: int                 # number of sequences
+    n*: int                 # number of sliding-window sequences
     order*: seq[int]        # shuffle indices
 
 proc len*(c: Corpus): int = c.n
@@ -19,40 +19,18 @@ proc len*(c: Corpus): int = c.n
 template sequence*(c: Corpus; idx: int): untyped =
   block:
     let actual = if c.order.len == 0: idx else: c.order[idx]
-    let offset = actual * c.seqLen
-    c.tokens.toOpenArray(offset, offset + c.seqLen - 1)
+    c.tokens.toOpenArray(actual, actual + c.seqLen - 1)
 
-proc readU32Le(buf: string; offset: var int): uint32 {.inline.} =
-  result = uint32(buf[offset].ord) or
-    (uint32(buf[offset + 1].ord) shl 8) or
-    (uint32(buf[offset + 2].ord) shl 16) or
-    (uint32(buf[offset + 3].ord) shl 24)
-  offset += 4
-
-proc readI32Le(buf: string; offset: var int): int32 {.inline.} =
-  cast[int32](readU32Le(buf, offset))
-
-proc loadCorpus*(path: string): Corpus =
-  let buf = readFile(path)
-  var offset = 0
-
-  let numSeq = readU32Le(buf, offset).int
-  let seqLen = readU32Le(buf, offset).int
-  let vocabSize = readU32Le(buf, offset).int
-
-  result.n = numSeq
+proc loadCorpus*(textPath: string; tok: Tokenizer; seqLen: int): Corpus =
+  let text = readFile(textPath)
+  result.tokens = tok.encode(text)
   result.seqLen = seqLen
-  result.vocabSize = vocabSize
-  result.tokens = newSeq[int32](numSeq * seqLen)
-  result.order = newSeq[int](numSeq)
-
-  for i in 0 ..< numSeq * seqLen:
-    result.tokens[i] = readI32Le(buf, offset)
-
-  for i in 0 ..< numSeq:
+  result.vocabSize = tok.vocabSize
+  result.n = max(0, result.tokens.len - seqLen)
+  result.order = newSeq[int](result.n)
+  for i in 0 ..< result.n:
     result.order[i] = i
-
-  echo fmt"  Loaded {path}: {numSeq} sequences, seqLen={seqLen}, vocabSize={vocabSize}"
+  echo fmt"  Loaded {textPath}: {result.tokens.len} tokens, {result.n} sequences, seqLen={seqLen}, vocabSize={result.vocabSize}"
 
 proc shuffle*(c: var Corpus) =
   for i in countdown(c.n - 1, 1):
