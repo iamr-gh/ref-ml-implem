@@ -1,7 +1,12 @@
 ## Models and training utilities.
+##
+## Performance-critical inner loops use raw pointers + {.checks:off.}
+## to minimize overhead. The algorithmic structure mirrors model.nim exactly.
 
 import std/[math, random]
 import data
+
+{.push checks: off.}
 
 type
   Metrics* = object
@@ -10,7 +15,7 @@ type
 
   Layer* = object
     inDim*, outDim*: int
-    w*: seq[float32]   # row-major: w[input * outDim + output]
+    w*: seq[float32]   # row-major: w[i * outDim + j]
     b*: seq[float32]
 
   Mlp* = object
@@ -26,14 +31,11 @@ proc initLayer*(inDim, outDim: int): Layer =
   result.w = newSeq[float32](inDim * outDim)
   result.b = newSeq[float32](outDim)
 
-  # He-ish init works well with ReLU hidden layers.
   let scale = sqrt(2.0'f32 / float32(inDim))
   for i in 0 ..< result.w.len:
     result.w[i] = rand(2.0'f32 * scale) - scale
 
 proc initMlp*(inputDim, outputDim: int; hidden: openArray[int]): Mlp =
-  ## Create input -> hidden... -> output MLP.
-  ## Hidden layers use ReLU; final layer uses softmax.
   var prev = inputDim
   for h in hidden:
     doAssert h > 0, "hidden layer sizes must be positive"
@@ -42,7 +44,6 @@ proc initMlp*(inputDim, outputDim: int; hidden: openArray[int]): Mlp =
   result.layers.add(initLayer(prev, outputDim))
 
 proc initWorkspace*(m: Mlp): MlpWorkspace =
-  ## Reusable buffers. activations[0] is the input copy, activations[^1] probs.
   result.activations = newSeq[seq[float32]](m.layers.len + 1)
   result.deltas = newSeq[seq[float32]](m.layers.len)
 
@@ -52,18 +53,18 @@ proc initWorkspace*(m: Mlp): MlpWorkspace =
     result.deltas[li] = newSeq[float32](layer.outDim)
 
 proc relu(x: float32): float32 {.inline.} =
-  if x > 0: x else: 0
+  if x > 0'f32: x else: 0'f32
 
-proc softmaxDyn(x: var seq[float32]) =
+proc softmaxInPlace(x: ptr UncheckedArray[float32]; len: int) =
   var maxVal = x[0]
-  for v in x:
-    if v > maxVal: maxVal = v
+  for i in 1 ..< len:
+    if x[i] > maxVal: maxVal = x[i]
 
   var sum: float32 = 0
-  for i in 0 ..< x.len:
+  for i in 0 ..< len:
     x[i] = exp(x[i] - maxVal)
     sum += x[i]
-  for i in 0 ..< x.len:
+  for i in 0 ..< len:
     x[i] /= sum
 
 proc crossEntropyDyn(probs: openArray[float32]; y: int): float32 =
@@ -79,23 +80,36 @@ proc argmaxDyn(x: openArray[float32]): int =
       bestVal = x[i]
   best
 
+template ua(s: seq[float32]): ptr UncheckedArray[float32] =
+  cast[ptr UncheckedArray[float32]](s[0].unsafeAddr)
+
 proc forward*(m: Mlp; x: openArray[float32]; ws: var MlpWorkspace) =
-  ## Fill workspace activations; output probabilities are ws.activations[^1].
-  for i in 0 ..< x.len:
-    ws.activations[0][i] = x[i]
+  let nLayers = m.layers.len
 
-  for li, layer in m.layers:
-    for j in 0 ..< layer.outDim:
-      var s = layer.b[j]
-      for i in 0 ..< layer.inDim:
-        s += ws.activations[li][i] * layer.w[i * layer.outDim + j]
-      ws.activations[li + 1][j] = s
+  # Copy input
+  let srcAddr = x[0].unsafeAddr
+  let dstAddr = addr ws.activations[0][0]
+  copyMem(dstAddr, srcAddr, x.len * sizeof(float32))
 
-    if li < m.layers.len - 1:
-      for j in 0 ..< layer.outDim:
-        ws.activations[li + 1][j] = relu(ws.activations[li + 1][j])
+  for li in 0 ..< nLayers:
+    let inD = m.layers[li].inDim
+    let outD = m.layers[li].outDim
+    let actIn = ua(ws.activations[li])
+    let actOut = ua(ws.activations[li + 1])
+    let w = ua(m.layers[li].w)
+    let b = ua(m.layers[li].b)
+
+    for j in 0 ..< outD:
+      var s = b[j]
+      for i in 0 ..< inD:
+        s += actIn[i] * w[i * outD + j]
+      actOut[j] = s
+
+    if li < nLayers - 1:
+      for j in 0 ..< outD:
+        actOut[j] = relu(actOut[j])
     else:
-      softmaxDyn(ws.activations[li + 1])
+      softmaxInPlace(actOut, outD)
 
 proc predict*(m: Mlp; x: openArray[float32]; ws: var MlpWorkspace): int =
   m.forward(x, ws)
@@ -106,28 +120,40 @@ proc trainOne*(m: var Mlp; x: openArray[float32]; y: int; lr: float32; ws: var M
   let probs = ws.activations[^1]
   result = crossEntropyDyn(probs, y)
 
-  # Output delta = softmax probs - oneHot(y)
   let lastLi = m.layers.len - 1
-  for j in 0 ..< probs.len:
-    ws.deltas[lastLi][j] = probs[j]
-  ws.deltas[lastLi][y] -= 1.0'f32
+  let outD = m.layers[lastLi].outDim
+  let delta = ua(ws.deltas[lastLi])
+  let probsArr = ua(ws.activations[^1])
+  for j in 0 ..< outD:
+    delta[j] = probsArr[j]
+  delta[y] -= 1.0'f32
 
   for li in countdown(m.layers.len - 1, 0):
+    let inD = m.layers[li].inDim
+    let outD = m.layers[li].outDim
+    let w = ua(m.layers[li].w)
+    let b = ua(m.layers[li].b)
+    let actIn = ua(ws.activations[li])
+    let dlt = ua(ws.deltas[li])
+
     if li > 0:
-      # Compute with current weights before updating them.
-      for i in 0 ..< m.layers[li].inDim:
+      # Compute prev delta with current weights before updating.
+      let prevDelta = ua(ws.deltas[li - 1])
+      let prevAct = ua(ws.activations[li])
+      for i in 0 ..< inD:
         var s: float32 = 0
-        for j in 0 ..< m.layers[li].outDim:
-          s += m.layers[li].w[i * m.layers[li].outDim + j] * ws.deltas[li][j]
-        ws.deltas[li - 1][i] = if ws.activations[li][i] > 0: s else: 0
+        for j in 0 ..< outD:
+          s += w[i * outD + j] * dlt[j]
+        prevDelta[i] = if prevAct[i] > 0'f32: s else: 0'f32
 
     # SGD update for this layer.
-    for i in 0 ..< m.layers[li].inDim:
-      let xi = ws.activations[li][i]
-      for j in 0 ..< m.layers[li].outDim:
-        m.layers[li].w[i * m.layers[li].outDim + j] -= lr * xi * ws.deltas[li][j]
-    for j in 0 ..< m.layers[li].outDim:
-      m.layers[li].b[j] -= lr * ws.deltas[li][j]
+    for i in 0 ..< inD:
+      let xi = actIn[i]
+      let base = i * outD
+      for j in 0 ..< outD:
+        w[base + j] -= lr * xi * dlt[j]
+    for j in 0 ..< outD:
+      b[j] -= lr * dlt[j]
 
 proc trainEpoch*[I: static int](m: var Mlp; ds: Dataset[I]; lr: float32; ws: var MlpWorkspace): float32 =
   var total: float32 = 0
@@ -146,3 +172,5 @@ proc evaluate*[I: static int](m: Mlp; ds: Dataset[I]; ws: var MlpWorkspace): Met
     if argmaxDyn(probs) == y: inc correct
   result.loss = totalLoss / float32(ds.len)
   result.accuracy = correct.float32 / ds.len.float32
+
+{.pop.}
