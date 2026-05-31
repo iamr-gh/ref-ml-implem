@@ -19,7 +19,6 @@ transpose :: proc(x: ^[$A][$B]$V, xT: ^[B][A]V) {
 // probably should softmax?
 softmax :: proc(vec: ^[1][$A]$V) {
 	// there's a math trick often done with subtracting max before exponentiating
-
 	sum := V(0)
 	// traditionally slow part
 	for num in vec[0] {

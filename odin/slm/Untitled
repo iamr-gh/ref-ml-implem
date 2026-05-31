@@ -1,0 +1,79 @@
+Free form notes from arpith call:
+- my goal is to understand day to day of engineering work more
+  - specifics are important 
+  - meeting time, etc
+  - 
+
+- I would be working under arpith, which is different
+    -
+
+new TPUs to our modelers
+- better videos to viewers 
+
+- gaston
+
+broadly efficiency across all the different boundaries
+
+data -> engineers -> networks -> cpu pre-preprocessors -> TPU
+
+modelers want to launch something new, and then we'll need to address issues
+
+new TPUs coming into the chain
+- our level is very abstracted, we're executing on a cluster
+
+
+loan out is not the choice he would use
+- we're not GDM
+- they work with the quality teams, but it's like 
+
+previously at IBM research in performance optimization
+- building supercomputers for national labs, but they wouldn't give you the real workload
+- hand over the compiler, and hope it is better on theri
+- no chance to look at it end to end
+
+really nice bc you can see the entire stack
+- unlike nvidia go straight to source code of compiler
+- go to the modeling teams
+    - propose changes yourself, and either you or them do the experiments
+    - 
+
+- listening 
+
+- different points
+
+- google has good tools for monitoring, bespoke infra for 
+    - you don't need to worry about small bugs
+
+- when something fails, it's not a hardware failure, it's an 
+
+- youtube is not in its own silo, everything is shared
+- bc core infra is amortized around different 
+
+- we don't make changes to the compiler, a lot of high level usage
+
+
+- his personal
+- new training platform
+    - he worked with 2 ppl under gaston's team
+    - debugged things together, got things up and running
+
+- tooling is common across alphabet, but our system is unique
+    - resources are unique, but also application level mappings
+    - different kinds of queues placed in various places
+    - how do you get visibility in and then throughput
+- new functionality added and then fanned out
+
+- new training system, software is reused
+- new tools to 
+- 3 quarters, 1 quarter of planning, 1 quarter of a lot of work from them, 1 quarter of
+
+- 20-50% slower, bigger issues would be from other model architecture
+
+- on a yearly time frame of model changes, always experimenting with different architectures
+
+yt models are different
+- recommendation systems, dense part
+- but a much larger sparse part due to the embedding models, relies on sparse cores
+- ads has a similar workload
+
+
